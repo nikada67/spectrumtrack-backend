@@ -173,4 +173,43 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
  
+// ── POST /api/auth/register ──────────────────────────────────────────────────
+router.post('/register', async (req, res) => {
+  const { firstName, lastName, email, password, role } = req.body;
+
+  if (!firstName || !lastName || !email || !password) {
+    return res.status(400).json({ error: 'All fields required' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const validRoles = ['admin', 'bcba', 'teacher', 'aide', 'parent'];
+  const userRole = validRoles.includes(role) ? role : 'aide';
+
+  try {
+    const [existing] = await pool.execute(
+      'SELECT id FROM users WHERE email = ? LIMIT 1',
+      [email.toLowerCase().trim()]
+    );
+    if (existing[0]) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const name = `${firstName} ${lastName}`;
+
+    const [result] = await pool.execute(
+      'INSERT INTO users (organization_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+      [1, name, email.toLowerCase().trim(), passwordHash, userRole]
+    );
+
+    return res.status(201).json({ message: 'Account created successfully', userId: result.insertId });
+  } catch (err) {
+    console.error('Register error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
